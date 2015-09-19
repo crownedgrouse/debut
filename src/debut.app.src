@@ -1,0 +1,13 @@
+{application, debut,
+ [
+  {description, "DEB UTility - Escript Debian package manager"},
+  {vsn, "0.1.0"},
+  {id, "git"},
+  {modules, []},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {env, []}
+ ]}.
