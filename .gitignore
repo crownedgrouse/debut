@@ -1,0 +1,17 @@
+.rebar
+.erlang.mk
+debut
+debut.d
+.eunit
+deps
+logs
+misc
+*.o
+*.beam
+*.plt
+erl_crash.dump
+*~
+*.html
+edoc-info
+*.css
+ebin
