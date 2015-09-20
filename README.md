@@ -9,4 +9,4 @@ It allow :
 * Package information extraction
 * Package management with ![debris](https://github.com/crownedgrouse/debris) repository service 
 
-
+Complete documentation is available in ![Wiki](https://github.com/crownedgrouse/debut/wiki).
