@@ -2,7 +2,7 @@
 # debut
 DEBian Utility Tool
 
-`debut` is an Erlang/OTP commandline escript for Debian (.deb) packages.
+`debut` is an Erlang/OTP commandline escript for Debian (.deb) packages handling.
 
 It allow :
 * Package creation
