@@ -35,6 +35,8 @@
 
 -export([main/1]).
 
+-include_lib("kernel/include/file.hrl").
+
 %%*** Macros *******************************************************************
 -define(DEPS, [debbie, debut, edgar, geas, getopt, swab]).
 
@@ -103,6 +105,7 @@ comment(C, Level) -> ?PRINT("% " ++ C, Level) .
           {version, $V,        "version", undefined     , "Version"}
          ,{verbose, $v,        "verbose",    integer    , "Verbosity"}
          ,{help,    $h,        "help",    undefined     , "This help"}
+         ,{user,    $u,        "user",     string     , "User to set on data. Syntax : uid:name"}
         ]).
 
 % -B --build  : create Debian package
@@ -111,6 +114,8 @@ comment(C, Level) -> ?PRINT("% " ++ C, Level) .
         [
           {build,   $B,       "build",  undefined     , "Build Debian package"}
          ,{dir,     $d,   "directory",     string     , "Directory"}
+         ,{user,    $u,        "user",     string     , "(uid:name) User to set on data"}
+         ,{group,   $g,       "group",     string     , "(gid:name) Group to set on data"}
          ,{verbose, $v,     "verbose",    integer     , "Verbosity"}
          ,{help,    $h,        "help",  undefined     , "This help"}
         ]).
@@ -324,14 +329,38 @@ get_all_credits() ->  lists:map(fun({M,P}) -> {M, get_credit(M)} end,
 
 
 build(Options) -> RootPath = proplists:get_value(dir, Options),
-                  build(detect(RootPath), RootPath).
+                  build(detect(RootPath), RootPath, Options).
 
 %%------------------------------------------------------------------------------
 %% @doc 
 %% @end
 %%------------------------------------------------------------------------------
-build(external,RootPath) -> 
-                    case debbie:fy([{root_path, RootPath}]) of
+build(external,RootPath, Options) -> 
+                    U = case proplists:get_value(user, Options, []) of
+                             [] -> [] ;
+                             Su -> case string:tokens(Su, ":") of
+                                        [Nu] -> % only a name, take current uid
+                                               {ok, Iu} = file:read_file_info(RootPath),
+                                               Uid = Iu#file_info.uid,
+                                               {user, {Uid, Nu}} ;
+                                        [Uid, Nu] -> {user, {list_to_integer(Uid), Nu}};
+                                        X   -> ?FATAL(X)
+                                        
+                                   end                                    
+                        end,
+                    G = case proplists:get_value(group, Options, []) of
+                             [] -> [] ;
+                             Sg -> case string:tokens(Sg, ":") of
+                                        [Ng] -> % only a name, take current uid
+                                               {ok, Ig} = file:read_file_info(RootPath),
+                                               Gid = Ig#file_info.gid,
+                                               {group, {Gid, Ng}} ;
+                                        [Gid, Ng] -> {group, {list_to_integer(Gid), Ng}};
+                                        Y   -> ?FATAL(Y)
+                                        
+                                   end                                    
+                        end,
+                    case debbie:fy([{root_path, RootPath}] ++ [U] ++ [G]) of
                         {error, Reason} -> ?FATAL(Reason), 1 ;
                         ok -> % Rename .deb to debian format
                               ?PRINT(rename_deb(filename:join(RootPath,"debian.deb")),0),
@@ -354,11 +383,8 @@ rename_deb(F) -> Target = filename:join(filename:dirname(F), guess_deb_name(F)),
                       ok              -> Target
                  end.
 
-%%------------------------------------------------------------------------------
-%% @doc Return debian package name from control file
-%% @end
-%%------------------------------------------------------------------------------
-guess_deb_name(F) -> debris_lib:guess_deb_name(F).
+
+
 
 %%******************************************************************************
 
@@ -431,3 +457,15 @@ search_field(Control, Field) -> {ok, F} = swab:sync([{grab, escape_re(Field) ++ 
 
 % Escape '-' character for regexp
 escape_re(S) -> S. % TODO
+
+%%------------------------------------------------------------------------------
+%% @doc Return debian package name from control file
+%% @end
+%%------------------------------------------------------------------------------
+guess_deb_name(F) -> % Extract name, version , architecture from control file
+                     Control = binary_to_list(extract_control(F)),
+                     Name    = search_field(Control, "Package"),
+                     Version = search_field(Control, "Version"),
+                     Archi   = search_field(Control, "Architecture"),
+                     lists:flatten(Name ++ "_" ++ Version ++ "_" ++ Archi ++ ".deb").
+
