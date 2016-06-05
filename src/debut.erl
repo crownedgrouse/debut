@@ -75,7 +75,7 @@ display(S, L) when (L < 0) -> case ( - get(verbosity) == L ) of
                                     false -> skip 
                               end;
 display(S, L) when (L==0)  -> io:format(standard_io,format(S),[fold(S)]) ; 
-display(S, L)              -> io:format(standard_error,format(S),[fold(S)]).
+display(S, _)              -> io:format(standard_error,format(S),[fold(S)]).
 
 fold(S) -> case io_lib:printable_unicode_list(S) of
                 true -> {ok, X} = swab:sync([{fold, 80}],S), X ;
@@ -108,7 +108,7 @@ comment(C, Level) -> ?PRINT("% " ++ C, Level) .
          ,{user,    $u,        "user",     string     , "User to set on data. Syntax : uid:name"}
         ]).
 
-% -B --build  : create Debian package
+% -B --build  : build Debian package
 % -d --directory : directory
 -define(OptBuildList,
         [
@@ -119,7 +119,6 @@ comment(C, Level) -> ?PRINT("% " ++ C, Level) .
          ,{verbose, $v,     "verbose",    integer     , "Verbosity"}
          ,{help,    $h,        "help",  undefined     , "This help"}
         ]).
-
 % -I --info   : Get info from Debian package (mainly control file)
 % -f --file   : Debian file
 % If extra argument : show only this field if exists
@@ -177,7 +176,6 @@ main(Args) ->
                         {build, Opt, _}     -> build(Opt) ;
                         {info, Opt, NOpt}   -> info(Opt, NOpt) ;
                         {repo, Opt, _}      -> repo(Opt) ;
-                        %{web, Opt, _}       -> web(Opt);
                         Z                   -> io:format("Unexpected error. ~p\n",[Z]), halt(2)
                      end;
         _:Reason -> io:format("Error. ~p\n",[Reason]), halt(3)
@@ -290,7 +288,7 @@ get_all_modules()  ->
         lists:foreach(fun(D) -> code:ensure_loaded(D) end, ?DEPS),
         L = code:all_loaded(),
         % Take only module in escript (dirname = debut)
-        lists:filter(fun({Mod, Path}) -> 
+        lists:filter(fun({_Mod, Path}) -> 
                         case Path of 
                           Path when is_atom(Path) -> false ;
                           Path when is_list(Path) -> 
@@ -307,7 +305,7 @@ get_all_modules()  ->
 %%------------------------------------------------------------------------------
 -spec get_all_versions() -> list().
 
-get_all_versions() -> lists:map(fun({M,P}) -> {M, get_version(M)} end, 
+get_all_versions() -> lists:map(fun({M, _P}) -> {M, get_version(M)} end, 
                                               lists:sort(get_all_modules())).
 
 %%------------------------------------------------------------------------------
@@ -316,7 +314,7 @@ get_all_versions() -> lists:map(fun({M,P}) -> {M, get_version(M)} end,
 %%------------------------------------------------------------------------------
 -spec get_all_credits() -> list().
 
-get_all_credits() ->  lists:map(fun({M,P}) -> {M, get_credit(M)} end, 
+get_all_credits() ->  lists:map(fun({M, _P}) -> {M, get_credit(M)} end, 
                                               lists:sort(get_all_modules())).
 
 %%******************************************************************************
@@ -387,26 +385,6 @@ rename_deb(F) -> Target = filename:join(filename:dirname(F), guess_deb_name(F)),
 
 
 %%******************************************************************************
-
-guess(Options) ->   GuessPath = proplists:get_value(guess, Options),
-                    case geas:info(GuessPath) of
-                        {error, Reason}    -> io:format("Error: ~s ~n~n", [Reason]), 1 ;
-                        {ok, L } -> F = fun({Key, Val}) ->   
-                                            case {Key, Val} of
-                                                 {_, undefined} -> skip ;
-                                                 {_, []} -> skip ;
-                                                 {Key, Val} when is_list(Val) -> 
-                                                            case io_lib:printable_list(Val) of
-                                                                 true  -> io:format("~-24s~s~n", [atom_to_list(Key), lists:flatten(Val)]) ;
-                                                                 false -> io:format("~-24s~p~n", [atom_to_list(Key), Val]) 
-                                                            end;
-                                                 {Key, Val} -> io:format("~-24s~p~n", [atom_to_list(Key), Val]) 
-                                            end
-                                        end,
-                                    lists:foreach(F, L),
-                                    halt(0)
-                    end.
-
 %%------------------------------------------------------------------------------
 %% @doc Get stdin
 %% @end
