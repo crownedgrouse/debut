@@ -93,6 +93,7 @@ comment(C, Level) -> ?PRINT("% " ++ C, Level) .
 -define(OptHelpList,
         [
           {version, $V,     "version",    undefined     , "Version"}
+         ,{admin,   $A,       "admin",    undefined     , "Administration"}
          ,{build,   $B,       "build",    undefined     , "Build Debian package"}
          ,{info,    $I,        "info",    undefined     , "Get info from Debian package"}
          ,{manage,  $M,      "manage",    undefined     , "Manage Debian repository"}
@@ -105,7 +106,6 @@ comment(C, Level) -> ?PRINT("% " ++ C, Level) .
           {version, $V,        "version", undefined     , "Version"}
          ,{verbose, $v,        "verbose",    integer    , "Verbosity"}
          ,{help,    $h,        "help",    undefined     , "This help"}
-         ,{user,    $u,        "user",     string     , "User to set on data. Syntax : uid:name"}
         ]).
 
 % -B --build  : build Debian package
@@ -131,12 +131,10 @@ comment(C, Level) -> ?PRINT("% " ++ C, Level) .
          ,{field,   undefined, undefined, string        , "Display particular field(s) only on output (otherwise any)"}
         ]).
 
-% -R --repo      : manage Debian repository
-% -d --directory : directory
-% -f --file      : file
+% -M --manage      : manage Debian repository
 -define(OptRepoList,
         [
-          {info,       $M,      "manage",    undefined     , "Manage Debian repository"}
+          {manage,     $M,      "manage",    undefined     , "Manage Debian repository"}
          ,{file,       $f,        "file",    string        , "Debian file"}
          ,{package,    $p,     "package",    string        , "Debian package"}
          ,{repository, $r,  "repository",    string        , "Target repository"}
@@ -145,6 +143,29 @@ comment(C, Level) -> ?PRINT("% " ++ C, Level) .
          ,{verbose,    $v,     "verbose",    integer       , "Verbosity"}
          ,{help,       $h,        "help",    undefined     , "This help"}
         ]).
+
+% -A --admin  : Administration
+% enable  : allow access to repository
+% disable : disable access to repository
+% admin   : administration
+% write   : allowed
+% read    : read
+
+-define(OptAdminList,
+        [
+          {admin,      $A,       "admin",    undefined      , "Administration commands"}
+		 ,{info,       $i,        "info",    undefined      , "Show informations"}
+         ,{'node',     $n,        "node",     string        , "Debris node, if not on local machine"}
+         ,{cookie,     $k,      "cookie",     string        , "Erlang cookie to connect Debris node, if different from local"}
+		 ,{user,       $u,        "user",     string        , "User name"}
+		 ,{enable,     $e,      "enable",     undefined     , "Enable access"}
+		 ,{disable,    $d,     "disable",     undefined     , "Disable access"}
+		 ,{level,      $l,       "level",     string        , "Access right level [a,w,r]"}
+         ,{repository, $r,  "repository",     string        , "Target repository"}
+         ,{verbose,    $v,     "verbose",    integer        , "Verbosity"}
+         ,{help,       $h,        "help",    undefined      , "This help"}
+        ]).
+		
 
 
 %%*** Main *********************************************************************
@@ -158,7 +179,8 @@ main(Args) ->
         version_cmd(Args),
         build_cmd(Args),
         info_cmd(Args),
-        repo_cmd(Args),
+        manage_cmd(Args),
+        admin_cmd(Args),
         throw({help, cmd})
     catch
 	    throw:Cmd -> case Cmd of
@@ -170,15 +192,18 @@ main(Args) ->
                                                         halt(1);
                         {help, W} when (W =:= info )    -> getopt:usage(?OptInfoList, escript:script_name()),
                                                         halt(1);
-                        {help, W} when (W =:= repo )    -> getopt:usage(?OptRepoList, escript:script_name()),
+                        {help, W} when (W =:= manage )  -> getopt:usage(?OptRepoList, escript:script_name()),
+                                                        halt(1);
+                        {help, W} when (W =:= admin )   -> getopt:usage(?OptAdminList, escript:script_name()),
                                                         halt(1);
                         {version, Opt, _}   -> version(Opt) ;
                         {build, Opt, _}     -> build(Opt) ;
                         {info, Opt, NOpt}   -> info(Opt, NOpt) ;
-                        {repo, Opt, _}      -> repo(Opt) ;
-                        Z                   -> io:format("Unexpected error. ~p\n",[Z]), halt(2)
+                        {manage, Opt, _}    -> manage(Opt) ;
+                        {admin, Opt, _}     -> admin(Opt) ;
+                        Z                   -> io:format("Unexpected error. ~p~n",[Z]), halt(2)
                      end;
-        _:Reason -> io:format("Error. ~p\n",[Reason]), halt(3)
+        _:Reason -> io:format("Error. ~p~n",[Reason]), halt(3)
     after
         halt(0)
     end.
@@ -197,7 +222,10 @@ build_cmd(Args)   -> ?TEST_HELP(?OptBuildList, build).
 
 info_cmd(Args)    -> ?TEST_HELP(?OptInfoList, info).
 
-repo_cmd(Args)    -> ?TEST_HELP(?OptRepoList, repo). 
+manage_cmd(Args)  -> ?TEST_HELP(?OptRepoList, manage). 
+
+admin_cmd(Args)  -> ?TEST_HELP(?OptAdminList, admin). 
+
 
 
 %%******************************************************************************
@@ -241,8 +269,56 @@ search_fields(Control, List) -> lists:map(fun(Field) -> ?PRINT(search_field(Cont
 %%******************************************************************************
 %%*** Repository ***************************************************************
 %%******************************************************************************
-repo(_) -> ok.
+manage(_) -> ok.
 
+%%******************************************************************************
+%%*** Admin ********************************************************************
+%%******************************************************************************
+admin(Options) -> % Get admin password TODO hide password input
+				  User  = proplists:get_value(user, Options, '_'),
+				  Repo  = proplists:get_value(repository, Options, '_'),
+                  Debris =  list_to_atom(proplists:get_value('node', Options, "debris@" ++ net_adm:localhost())),
+				  case proplists:get_value(cookie, Options) of
+						[]        -> ok ;
+						undefined -> ok ;
+						C  -> ?PRINT("Setting cookie for Debris node access",2),
+							  erlang:set_cookie(Debris, list_to_atom(C)),
+							  erlang:set_cookie(node(), list_to_atom(C))
+				  end,
+				  % Verify that debris node exists and debris_srv reachable
+				  case net_adm:ping(Debris) of
+					   pong -> global:sync(), % Need to wait global registration table update
+							   case global:whereis_name(debris_srv)  of
+									undefined ->  ?PRINT("Debris server not found.",0), halt(1);
+									_ -> ok
+							   end;
+					   _    -> ?PRINT("Cannot ping Debris node.",0), halt(1) 
+				  end,
+				  Passwd = string:strip(io:get_line("Admin password: "),right, $\n),
+				  Seed  = erlang:phash2(rand:uniform()),
+				  Cred  = sha256_string(sha256_string(Passwd) ++ integer_to_list(Seed)),
+				  % Prepare command
+				  Cmd = case proplists:get_value(info, Options, false) of
+							% Set permissions
+							false -> case proplists:get_value(enable, Options, false) of
+										  false -> case proplists:get_value(disable, Options, false) of
+														% Change access level and keep enable/disable status
+														false -> {permit, Cred, Seed, User, Repo, [], proplists:get_value(level, Options, [])};
+										                % Disable user
+														_     -> {permit, Cred, Seed, User, Repo, false, proplists:get_value(level, Options, [])}
+												   end ;
+										  % Enable user
+										  _     -> {permit, Cred, Seed, User, Repo, true, proplists:get_value(level, Options, [])}
+									 end;
+							% Get infos
+							true  -> {info, Cred, Seed, User, Repo}	 
+				        end,
+io:format("~p~n",[Cmd]),
+				  case catch gen_server:call({global, debris_srv}, Cmd) of
+									      {'EXIT', _} -> ?PRINT("Cannot reach debris server",1), halt(1);
+										  []          -> ?PRINT("Empty debris server response",1), halt(1) ;
+										  X           -> io:format("~p~n", [X])
+				  end.
 
 %%******************************************************************************
 %%*** Version ******************************************************************
@@ -446,4 +522,18 @@ guess_deb_name(F) -> % Extract name, version , architecture from control file
                      Version = search_field(Control, "Version"),
                      Archi   = search_field(Control, "Architecture"),
                      lists:flatten(Name ++ "_" ++ Version ++ "_" ++ Archi ++ ".deb").
+
+%%-------------------------------------------------------------------------
+%% @doc 
+%% @end
+%%-------------------------------------------------------------------------
+sha256_string(S) -> hash_string(crypto:hash(sha256,S)).
+
+%%-------------------------------------------------------------------------
+%% @doc 
+%% @end
+%%-------------------------------------------------------------------------
+
+
+hash_string(X) -> lists:flatten([io_lib:format("~2.16.0b",[N]) || N <- binary_to_list(X)]).
 
