@@ -313,7 +313,6 @@ admin(Options) -> % Get admin password TODO hide password input
 							% Get infos
 							true  -> {info, Cred, Seed, User, Repo}	 
 				        end,
-io:format("~p~n",[Cmd]),
 				  case catch gen_server:call({global, debris_srv}, Cmd) of
 									      {'EXIT', _} -> ?PRINT("Cannot reach debris server",1), halt(1);
 										  []          -> ?PRINT("Empty debris server response",1), halt(1) ;
