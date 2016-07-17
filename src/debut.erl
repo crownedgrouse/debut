@@ -294,7 +294,10 @@ admin(Options) -> % Get admin password TODO hide password input
 							   end;
 					   _    -> ?PRINT("Cannot ping Debris node.",0), halt(1) 
 				  end,
-				  Passwd = string:strip(io:get_line("Admin password: "),right, $\n),
+				  io:format("Admin password: \x1B[8m"), % Some terminal does not allow hidden
+				  %Passwd = string:strip(io:get_line("Admin password: "),right, $\n),
+				  Passwd = string:strip(io:get_line(""),right, $\n),
+				  io:format("\x1B[0m"), % reset attributes
 				  Seed  = erlang:phash2(rand:uniform()),
 				  Cred  = sha256_string(sha256_string(Passwd) ++ integer_to_list(Seed)),
 				  % Prepare command
@@ -313,10 +316,11 @@ admin(Options) -> % Get admin password TODO hide password input
 							% Get infos
 							true  -> {info, Cred, Seed, User, Repo}	 
 				        end,
+				  io:format("\x1B[1A\x1B[K",[]), % remove password line above
 				  case catch gen_server:call({global, debris_srv}, Cmd) of
 									      {'EXIT', _} -> ?PRINT("Cannot reach debris server",1), halt(1);
 										  []          -> ?PRINT("Empty debris server response",1), halt(1) ;
-										  X           -> io:format("~p~n", [X])
+										  X           -> io:format("~ts", [display_response(X)])
 				  end.
 
 %%******************************************************************************
@@ -535,4 +539,20 @@ sha256_string(S) -> hash_string(crypto:hash(sha256,S)).
 
 
 hash_string(X) -> lists:flatten([io_lib:format("~2.16.0b",[N]) || N <- binary_to_list(X)]).
+
+%%-------------------------------------------------------------------------
+%% @doc 
+%% @end
+%%-------------------------------------------------------------------------
+display_response({user, N, false, L}) -> io_lib:format("~ts:0:~ts~n", [N, L]);
+
+display_response({user, N, true, L})  -> io_lib:format("~ts:1:~ts~n", [N, L]);
+
+
+display_response({repository, N, L}) when is_list(L) -> 
+	lists:flatten(lists:map(fun(U) -> io_lib:format("~ts:~ts", [N, display_response(U)]) end , L));
+
+
+display_response(X) when is_list(X) -> 
+	lists:flatten(lists:map(fun(Y) -> display_response(Y) end, X)).
 
