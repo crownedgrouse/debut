@@ -7,6 +7,6 @@ DEBian Utility Tool
 It allow :
 * Package creation
 * Package information extraction
-* Package management with ![debris](https://github.com/crownedgrouse/debris) repository service 
+* [WIP] Package management with ![debris](https://github.com/crownedgrouse/debris) repository service 
 
 Complete documentation is available in ![Wiki](https://github.com/crownedgrouse/debut/wiki).
